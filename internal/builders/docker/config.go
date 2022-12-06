@@ -19,21 +19,43 @@ import (
 	"path/filepath"
 	"net/url"
 	"strings"
+
+	toml "github.com/pelletier/go-toml"
 )
 
-// Digest specifies a digest values, including the name of the hash function that was used for computing the digest. 
+// BuildConfig is a collection of parameters to use for building the artifact.
+type BuildConfig struct {
+	// TODO(#1191): Add env and options if needed. 
+	// Command to pass to `docker run`. The command is taken as an array
+	// instead of a single string to avoid unnecessary parsing. See
+	// https://docs.docker.com/engine/reference/builder/#cmd and
+	// https://man7.org/linux/man-pages/man3/exec.3.html for more details.
+	Command []string `toml:"command"`
+	// The path, relative to the root of the git repository, where the artifact
+	// built by the `docker run` command is expected to be found.
+	ArtifactPath string `toml:"artifact_path"`
+}
+
+// Digest specifies a digest values, including the name of the hash function
+// that was used for computing the digest. 
 type Digest struct {
 	Alg string
 	Value string
 }
 
-// DockerImage fully specifies a docker image by a URI (e.g., including the docker image name and registry), and its digest.
+// DockerImage fully specifies a docker image by a URI (e.g., including the
+// docker image name and registry), and its digest.
 type DockerImage struct {
 	URI string
 	Digest Digest
 }
 
-// DockerBuildConfig is a convenience class for holding validated user inputs. 
+// ToString returns the builder image in the form of NAME@ALG:VALUE.
+func (bi *DockerImage) ToString() string {
+	return fmt.Sprintf("%s@%s:%s", bi.URI, bi.Digest.Alg, bi.Digest.Value) 
+}
+
+// DockerBuildConfig is a convenience class for holding validated user inputs.
 type DockerBuildConfig struct {
 	SourceRepo string
 	SourceDigest Digest
@@ -41,7 +63,8 @@ type DockerBuildConfig struct {
 	BuildConfigPath string
 }
   
-// NewDockerBuildConfig validates the inputs and generates an instance of DockerBuildConfig.
+// NewDockerBuildConfig validates the inputs and generates an instance of
+// DockerBuildConfig.
 func NewDockerBuildConfig(sourceRepo, sourceDigest, builderImage, buildConfigPath string) (*DockerBuildConfig, error) {
 	if err := validateURI(sourceRepo); err != nil {
 		return nil, err
@@ -113,22 +136,22 @@ func validateDockerImage(image string) (*DockerImage, error) {
 	return &dockerImage, nil
 }
 
-// GetSourceArtifact returns the source repo and its digest as an instance of ArtifactReference.
-func (config *DockerBuildConfig) GetSourceArtifact() ArtifactReference {
-	return ArtifactReference {
-		URI: config.SourceRepo,
-		Digest: config.SourceDigest.toMap(),
-	}
-}
-
-// GetBuilderImage returns the builder image as an instance of ArtifactReference.
-func (config *DockerBuildConfig) GetBuilderImage() ArtifactReference {
-	return ArtifactReference {
-		URI: config.BuilderImage.URI,
-		Digest: config.BuilderImage.Digest.toMap(),
-	} 
-}
-
-func (d* Digest) toMap() map[string]string {
+// ToMap returns this instance as a mapping between the algorithm and value.
+func (d* Digest) ToMap() map[string]string {
 	return map[string]string{d.Alg: d.Value}
+}
+
+// LoadBuildConfigFromFile loads build configuration from a toml file in the given path and returns an instance of BuildConfig.
+func LoadBuildConfigFromFile(path string) (*BuildConfig, error) {
+	tomlTree, err := toml.LoadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("couldn't load toml file: %v", err)
+	}
+
+	config := BuildConfig{}
+	if err := tomlTree.Unmarshal(&config); err != nil {
+		return nil, fmt.Errorf("couldn't ubmarshal toml file: %v", err)
+	}
+
+	return &config, nil
 }

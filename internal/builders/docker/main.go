@@ -15,26 +15,35 @@
 package main
 
 import (
-	"flag"
-	"log"
+	"errors"
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
 )
 
-func main() {
-	buildConfigPath := flag.String("build_config_path", "",
-		"Required - Path to a toml file containing the build configs.")
-	sourceRepo := flag.String("source_repo", "",
-		"Required - URL of the source repo.")
-	gitCommitHash := flag.String("git_commit_hash", "",
-		"Required - SHA1 Git commit digest of the revision of the source code to build the artefact from.")
-	builderImage := flag.String("builder_image", "",
-		"Required - URL indicating the Docker builder image, including a URI and image digest.")
-
-	flag.Parse()
-
-	dbc, err := NewDockerBuildConfig(*sourceRepo, *gitCommitHash, *builderImage, *buildConfigPath)
+func checkExit(err error) {
 	if err != nil {
-		log.Fatalf("Could not build DockerBuildConfig: %v", err)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
+}
 
-	log.Printf("Test output: %v", dbc)
+func rootCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "slsa-docker-based-generator [COMMAND] [FLAGS]",
+		Short: "Generate SLSA provenance for artifacts built using a docker builder image",
+		Long: `Generate SLSA provenance for artifacts built using a docker builder image.
+For more information on SLSA, visit https://slsa.dev`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return errors.New("expecting a command")
+		},
+	}
+	cmd.AddCommand(DryRunCmd(checkExit))
+	cmd.AddCommand(BuildCmd(checkExit))
+	return cmd
+}
+
+func main() {
+	checkExit(rootCmd().Execute())
 }

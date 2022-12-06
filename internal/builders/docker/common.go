@@ -17,19 +17,6 @@ package main
 // TODO(#1191): Update to the final BuildType URI.
 const DockerBasedBuildType = "https://slsa.dev/container-based-build/v0.1?draft"
 
-// BuildConfig is a collection of parameters to use for building the artifact.
-type BuildConfig struct {
-	// TODO(#1191): Add env and options if needed. 
-	// Command to pass to `docker run`. The command is taken as an array
-	// instead of a single string to avoid unnecessary parsing. See
-	// https://docs.docker.com/engine/reference/builder/#cmd and
-	// https://man7.org/linux/man-pages/man3/exec.3.html for more details.
-	Command []string `toml:"command"`
-	// The path, relative to the root of the git repository, where the artifact
-	// built by the `docker run` command is expected to be found.
-	ArtifactPath string `toml:"artifact_path"`
-}
-
 // BuildDefinition contains the information required for building an artifact using a Docker image.
 // Based on BuildDefinition in https://github.com/slsa-framework/slsa/pull/525. 
 type BuildDefinition struct {
