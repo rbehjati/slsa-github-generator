@@ -17,7 +17,6 @@ package main
 import (
 	"flag"
 	"log"
-	"strings"
 )
 
 func main() {
@@ -32,48 +31,10 @@ func main() {
 
 	flag.Parse()
 
-	_, err := NewDockerBuildConfig(*sourceRepo, *gitCommitHash, *builderImage, *buildConfigPath)
+	dbc, err := NewDockerBuildConfig(*sourceRepo, *gitCommitHash, *builderImage, *buildConfigPath)
 	if err != nil {
 		log.Fatalf("Could not build DockerBuildConfig: %v", err)
 	}
 
-	// TODO: Refactor and move to a builder function
-	artifacts := make(map[string]ArtifactReference)
-	artifacts["source"] = ArtifactReference {
-		URI: *sourceRepo,
-		Digest: toDigestMap(*gitCommitHash),
-	}
-
-	imageParts := strings.Split(*builderImage, "@")
-	if len(imageParts) != 2 {
-		log.Fatalf("got %s, want NAME@DIGEST format", *builderImage)
-	}
-
-	// TODO: check that imageParts[0] is a valid URI
-	artifacts["builderImage"] = ArtifactReference {
-		URI: imageParts[0],
-		Digest: toDigestMap(imageParts[1]),
-	}
-
-	ep := ParameterCollection {
-		Artifacts: artifacts,
-		Values: map[string]string{"configFile": *buildConfigPath},
-	}
-
-	bd := BuildDefinition  {
-		BuildType: DockerBasedBuildType,
-		ExternalParameters: ep,
-	}
-
-	log.Printf("Test output: %v", bd)
-}
-
-func toDigestMap(input string) map[string]string {
-	// We expect the input to be of the form ALG:VALUE
-	parts := strings.Split(input, ":")
-	if len(parts) != 2 {
-		log.Fatalf("got %s, want ALG:VALUE format", input)
-	}
-	return map[string]string{parts[0]: parts[1]}
-
+	log.Printf("Test output: %v", dbc)
 }

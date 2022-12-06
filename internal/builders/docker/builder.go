@@ -23,7 +23,7 @@ type DockerBuild struct {
 }
   
 func NewDockerBuild(config *DockerBuildConfig) (*DockerBuild, error) {
-	// TODO: takes the valid DockerBuildConfig and assembles the BuildDefinition
+	// TODO: Takes the valid DockerBuildConfig and assembles the BuildDefinition
 	return nil, nil
 }
   
@@ -32,6 +32,19 @@ func (d *DockerBuild) BuildArtifact() ([]intoto.Subject, error) {
 	return nil, nil
 }
 
-func DryRun(config *DockerBuildConfig) {
-	// TODO: return BuildDefinition 
+func DryRun(config *DockerBuildConfig) *BuildDefinition {
+	artifacts := make(map[string]ArtifactReference)
+	artifacts["source"] = config.GetSourceArtifact()
+	artifacts["builderImage"] = config.GetBuilderImage()
+
+	ep := ParameterCollection {
+		Artifacts: artifacts,
+		Values: map[string]string{"configFile": config.BuildConfigPath},
+	}
+
+	// Currently we don't have any SystemParameters or ResolvedDependencies. So these fields are left empty.
+	return &BuildDefinition  {
+		BuildType: DockerBasedBuildType,
+		ExternalParameters: ep,
+	}
 }
