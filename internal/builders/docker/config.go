@@ -14,6 +14,9 @@
 
 package main
 
+// This file contains functionality and structs for validating and
+// representing user inputs and configuration files.
+
 import (
 	"fmt"
 	"path/filepath"

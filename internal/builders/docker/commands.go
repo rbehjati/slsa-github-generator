@@ -14,9 +14,13 @@
 
 package main
 
+// This file contains definitions of the subcommands of the
+// `slsa-docker-based-generator` command.
+
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -86,9 +90,16 @@ func BuildCmd(check func(error)) *cobra.Command {
 			config, err := NewDockerBuildConfig(sourceRepo, gitCommitHash, builderImage, buildConfigPath)
 			check(err)
 
-			db, _ := SetUpBuildState(config)
-			// TODO: print subjects or report error.
-			_, _ = db.BuildArtifact()
+			db, err := SetUpBuildState(config)
+			check(err)
+			artifacts, err := db.BuildArtifact()
+			check(err)
+			log.Printf("Generated artifacts are: %v\n", artifacts)
+			if db.RepoInfo.RepoRoot != "" {
+				// If the repo was checked out by the tool into a temporary
+				// directory, remove the files and the directory.
+				db.RepoInfo.Cleanup()
+			}
 		},
 	}
 
