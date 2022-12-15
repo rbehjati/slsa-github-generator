@@ -38,10 +38,8 @@ func DryRunCmd(check func(error)) *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			config, err := pkg.NewDockerBuildConfig(io)
 			check(err)
-			log.Printf("The config is: %v\n", config)
-
-			// TODO(#1191): Create an instance of BuildDefinition from config.
-			bd := &pkg.BuildDefinition{}
+			
+			bd := pkg.CreateBuildDefinition(config)
 			check(writeBuildDefinitionToFile(*bd, buildDefinitionPath))
 		},
 	}
@@ -60,7 +58,7 @@ func writeBuildDefinitionToFile(bd pkg.BuildDefinition, path string) error {
 		return fmt.Errorf("couldn't marshal the BuildDefinition: %v", err)
 	}
 
-	if err := os.WriteFile(path, bytes, 0o600); err != nil {
+	if err := os.WriteFile(path, bytes, 0600); err != nil {
 		return fmt.Errorf("couldn't write BuildDefinition to file: %v", err)
 	}
 	return nil
@@ -76,12 +74,18 @@ func BuildCmd(check func(error)) *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			config, err := pkg.NewDockerBuildConfig(io)
 			check(err)
-			log.Printf("The config is: %v\n", config)
 
-			// TODO(#1191): Set up build state using config, and build the artifact.
-			artifacts := "To be implemented"
+			db, err := pkg.SetUpBuildState(config)
+			check(err)
+			artifacts, err := db.BuildArtifact()
+			check(err)
 			log.Printf("Generated artifacts are: %v\n", artifacts)
-			// TODO(#1191): Write subjects to file.
+			if db.RepoInfo.RepoRoot != "" {
+				// If the repo was checked out by the tool into a temporary
+				// directory, remove the files and the directory.
+				db.RepoInfo.Cleanup()
+			}
+			// TODO(#1191): Write subjects to a file.
 		},
 	}
 
