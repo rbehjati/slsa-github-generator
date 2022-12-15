@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package pkg
 
 // This file contains the structs and functionality for building artifacts
 // using a builder Docker image, and user-provided build configurations.

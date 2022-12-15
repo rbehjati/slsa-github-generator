@@ -24,6 +24,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/slsa-framework/slsa-github-generator/internal/builders/docker/pkg"
 )
 
 
@@ -39,10 +40,10 @@ func DryRunCmd(check func(error)) *cobra.Command {
 		Use:   "dry-run [FLAGS]",
 		Short: "Generates and stores a JSON-formatted BuildDefinition based on the input arguments.",
 		Run: func(cmd *cobra.Command, args []string) {
-			config, err := NewDockerBuildConfig(sourceRepo, gitCommitHash, builderImage, buildConfigPath)
+			config, err := pkg.NewDockerBuildConfig(sourceRepo, gitCommitHash, builderImage, buildConfigPath)
 			check(err)
 
-			bd := CreateBuildDefinition(config)
+			bd := pkg.CreateBuildDefinition(config)
 			check(writeBuildDefinitionToFile(*bd, buildDefinitionPath))
 		},
 	}
@@ -64,7 +65,7 @@ func DryRunCmd(check func(error)) *cobra.Command {
     return cmd
 }
 
-func writeBuildDefinitionToFile(bd BuildDefinition, path string) error {
+func writeBuildDefinitionToFile(bd pkg.BuildDefinition, path string) error {
 	bytes, err := json.Marshal(bd)
 	if err != nil {
 		return fmt.Errorf("couldn't marshal the BuildDefinition: %v", err)
@@ -87,10 +88,10 @@ func BuildCmd(check func(error)) *cobra.Command {
 		Use:   "build [FLAGS]",
 		Short: "Builds the artifacts using the build config, source repo, and the builder image.",
 		Run: func(cmd *cobra.Command, args []string) {
-			config, err := NewDockerBuildConfig(sourceRepo, gitCommitHash, builderImage, buildConfigPath)
+			config, err := pkg.NewDockerBuildConfig(sourceRepo, gitCommitHash, builderImage, buildConfigPath)
 			check(err)
 
-			db, err := SetUpBuildState(config)
+			db, err := pkg.SetUpBuildState(config)
 			check(err)
 			artifacts, err := db.BuildArtifact()
 			check(err)
