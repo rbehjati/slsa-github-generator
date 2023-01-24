@@ -76,6 +76,7 @@ type RepoCheckoutInfo struct {
 // repository from its source.
 type Fetcher interface {
 	Fetch() (*RepoCheckoutInfo, error)
+	EffectiveDigest() Digest
 }
 
 // Builder is responsible for setting up the environment and using docker
@@ -106,8 +107,13 @@ func (db *DockerBuild) CreateBuildDefinition() *BuildDefinition {
 	artifacts[SourceKey] = sourceArtifact(db.config)
 	artifacts[BuilderImageKey] = builderImage(db.config)
 
-	// Ignoring the error, as the input is a simple string array.
-	cmdBytes, _ := json.Marshal(db.buildConfig.Command)
+	// The input is a simple string array, no errors occur. But we check and
+	// print the error to make the linters happy.
+	cmdBytes, err := json.Marshal(db.buildConfig.Command)
+	if err != nil {
+		log.Printf("Could not unmarshal command array: %v.", err)
+	}
+
 	cmd := string(cmdBytes)
 
 	ep := ParameterCollection{
@@ -165,8 +171,18 @@ func (b *Builder) SetUpBuildState() (*DockerBuild, error) {
 		return nil, err
 	}
 
+	// Make a copy of b.config, but update its SourceDigest to the effective
+	// commit digest from the fetcher.
+	c := &DockerBuildConfig{
+		SourceRepo:         b.config.SourceRepo,
+		SourceDigest:       b.repoFetcher.EffectiveDigest(),
+		BuilderImage:       b.config.BuilderImage,
+		BuildConfigPath:    b.config.BuildConfigPath,
+		ResolutionStrategy: b.config.ResolutionStrategy,
+	}
+
 	db := &DockerBuild{
-		config:      &b.config,
+		config:      c,
 		buildConfig: bc,
 		RepoInfo:    repoInfo,
 	}
@@ -237,13 +253,14 @@ func runDockerRun(db *DockerBuild) error {
 // GitClient provides data and functions for fetching the source files from a
 // Git repository.
 type GitClient struct {
-	sourceRepo    *string
-	sourceDigest  *Digest
-	checkoutInfo  *RepoCheckoutInfo
-	logFiles      []string
-	errFiles      []string
-	forceCheckout bool
-	depth         int
+	sourceRepo         *string
+	sourceDigest       *Digest
+	effectiveDigest    *Digest
+	checkoutInfo       *RepoCheckoutInfo
+	logFiles           []string
+	errFiles           []string
+	resolutionStrategy int
+	depth              int
 }
 
 func newGitClient(config *DockerBuildConfig, depth int) (*GitClient, error) {
@@ -265,11 +282,12 @@ func newGitClient(config *DockerBuildConfig, depth int) (*GitClient, error) {
 	}
 
 	return &GitClient{
-		sourceRepo:    &repo,
-		sourceDigest:  &config.SourceDigest,
-		forceCheckout: config.ForceCheckout,
-		depth:         depth,
-		checkoutInfo:  &RepoCheckoutInfo{},
+		sourceRepo:         &repo,
+		sourceDigest:       &config.SourceDigest,
+		effectiveDigest:    &config.SourceDigest,
+		resolutionStrategy: config.ResolutionStrategy,
+		depth:              depth,
+		checkoutInfo:       &RepoCheckoutInfo{},
 	}, nil
 }
 
@@ -291,17 +309,30 @@ func (c *GitClient) Fetch() (*RepoCheckoutInfo, error) {
 	return c.checkoutInfo, nil
 }
 
-// verifyOrFetchRepo checks that the current working directly is a Git repository
-// at the expected Git commit hash; fetches the repo, if this is not the case.
+// EffectiveDigest returns the effective digest in this GitClient.
+func (c *GitClient) EffectiveDigest() Digest {
+	return Digest{
+		Alg:   c.effectiveDigest.Alg,
+		Value: c.effectiveDigest.Value,
+	}
+}
+
+// verifyOrFetchRepo checks that the current working directly is a Git
+// repository at the expected Git commit hash. If the repo is checked out at a
+// different commit, then based on the GitClient's resolution strategy one of
+// the following is done:
+//   - 'abort': terminates with an error,
+//   - 'checkout': checks out the repo at the given commit.
+//   - 'ignore': updates the effective commit to the checked out commit.
 func (c *GitClient) verifyOrFetchRepo() error {
 	if c.sourceDigest.Alg != "sha1" {
 		return fmt.Errorf("git commit digest must be a sha1 digest")
 	}
-	repoIsCheckedOut, err := c.verifyCommit()
-	if err != nil && !c.forceCheckout {
+	needsCheckout, err := c.needsCheckout()
+	if err != nil {
 		return err
 	}
-	if !repoIsCheckedOut || c.forceCheckout {
+	if needsCheckout {
 		if err := c.fetchSourcesFromGitRepo(); err != nil {
 			return fmt.Errorf("couldn't fetch sources from %q at commit %q: %v", *c.sourceRepo, c.sourceDigest, err)
 		}
@@ -309,24 +340,44 @@ func (c *GitClient) verifyOrFetchRepo() error {
 	return nil
 }
 
-// verifyCommit checks that the current working directory is the root of a Git
-// repository at the given commit hash. Returns an error if the working
-// directory is a Git repository at a different commit.
-func (c *GitClient) verifyCommit() (bool, error) {
+// needsCheckout checks if the source code needs to be fetched from the Git
+// repository. Returns true in the following cases:
+// * If the current directory is not the root of a Git repository,
+// * The commit hashes do not match, and the resolution strategy is 'checkout'.
+// Returns false, and no error if:
+//   - The repository is checked out at the given commit hash,
+//   - The repository is checked out at a different commit hash, and the
+//     resolution strategy is 'ignore'. In this case, the effectiveDigest in
+//     GitClient is updated to contain the actual checked-out commit digest.
+//
+// Returns false, and an error if the commit hashes do not match, and the
+// resolution strategy is 'abort'.
+func (c *GitClient) needsCheckout() (bool, error) {
 	cmd := exec.Command("git", "rev-parse", "--verify", "HEAD")
 	lastCommitIDBytes, err := cmd.Output()
 	if err != nil {
 		// The current working directory is not a git repo.
-		return false, nil
+		return true, nil
 	}
 	lastCommitID := strings.TrimSpace(string(lastCommitIDBytes))
 
 	if lastCommitID != c.sourceDigest.Value {
-		return false, errors.Errorf(&errGitCommitMismatch{},
-			"the repo is already checked out at a different commit (%q)", lastCommitID)
+		switch c.resolutionStrategy {
+		case CheckoutToResolve:
+			return true, nil
+		case IgnoreToResolve:
+			c.effectiveDigest = &Digest{
+				Alg:   "sha1",
+				Value: lastCommitID,
+			}
+			return false, nil
+		case AbortToResolve:
+			return false, errors.Errorf(&errGitCommitMismatch{},
+				"the repo is already checked out at a different commit (%q)", lastCommitID)
+		}
 	}
 
-	return true, nil
+	return false, nil
 }
 
 // fetchSourcesFromGitRepo clones a repo from the URL given in this GitClient,

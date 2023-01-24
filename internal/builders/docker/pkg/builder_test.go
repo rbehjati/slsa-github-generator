@@ -61,9 +61,9 @@ func Test_GitClient_verifyOrFetchRepo(t *testing.T) {
 		// Use a small repo for test
 		SourceRepo: "git+https://github.com/project-oak/transparent-release",
 		// The digest value does not matter for the test
-		SourceDigest:    Digest{Alg: "sha1", Value: "does-not-matter"},
-		BuildConfigPath: "internal/builders/docker/testdata/config.toml",
-		ForceCheckout:   false,
+		SourceDigest:       Digest{Alg: "sha1", Value: "does-not-matter"},
+		BuildConfigPath:    "internal/builders/docker/testdata/config.toml",
+		ResolutionStrategy: AbortToResolve,
 		// BuilderImage field is not relevant, so it is omitted
 	}
 	gc, err := newGitClient(config, 1)
@@ -89,9 +89,9 @@ func Test_GitClient_fetchSourcesFromGitRepo(t *testing.T) {
 		// Use a small repo for test
 		SourceRepo: "git+https://github.com/project-oak/transparent-release",
 		// The digest value does not matter for the test
-		SourceDigest:    Digest{Alg: "sha1", Value: "does-no-matter"},
-		BuildConfigPath: "internal/builders/docker/testdata/config.toml",
-		ForceCheckout:   false,
+		SourceDigest:       Digest{Alg: "sha1", Value: "does-no-matter"},
+		BuildConfigPath:    "internal/builders/docker/testdata/config.toml",
+		ResolutionStrategy: AbortToResolve,
 		// BuilderImage field is not relevant, so it is omitted
 	}
 	gc, err := newGitClient(config, 1)
@@ -140,6 +140,13 @@ type testFetcher struct{}
 
 func (testFetcher) Fetch() (*RepoCheckoutInfo, error) {
 	return &RepoCheckoutInfo{}, nil
+}
+
+func (testFetcher) EffectiveDigest() Digest {
+	return Digest{
+		Alg:   "sha1",
+		Value: "9b5f98310dbbad675834474fa68c37d880687cb9",
+	}
 }
 
 func Test_Builder_SetUpBuildState(t *testing.T) {

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -29,20 +30,35 @@ import (
 	"github.com/slsa-framework/slsa-github-generator/internal/utils"
 )
 
+var (
+	// Available strategies for dealing with a checked out commit that does not
+	// match the Git commit hash provided by the user.
+	buildStrategies = []string{"abort", "checkout"}
+
+	// For dry-run we have the additional value 'ignore' to allow building the
+	// BuildDefinition in case the checked out commit is different from the
+	// given Git commit hash.
+	dryRunStrategies = []string{"abort", "checkout", "ignore"}
+)
+
 // DryRunCmd returns a new *cobra.Command that validates the input flags, and
 // generates a BuildDefinition from them, or terminates with an error.
 func DryRunCmd(check func(error)) *cobra.Command {
 	io := &pkg.InputOptions{}
 	var buildDefinitionPath string
+	var resolutionStrategy string
 
 	cmd := &cobra.Command{
 		Use:   "dry-run [FLAGS]",
 		Short: "Generates and stores a JSON-formatted BuildDefinition based on the input arguments.",
 		Run: func(cmd *cobra.Command, args []string) {
+			strategy, err := validateResolutionStrategy(resolutionStrategy, false)
+			check(err)
+
 			w, err := utils.CreateNewFileUnderCurrentDirectory(buildDefinitionPath, os.O_WRONLY)
 			check(err)
 
-			config, err := pkg.NewDockerBuildConfig(io)
+			config, err := pkg.NewDockerBuildConfig(io, strategy)
 			check(err)
 
 			builder, err := pkg.NewBuilderWithGitFetcher(*config)
@@ -60,6 +76,8 @@ func DryRunCmd(check func(error)) *cobra.Command {
 	io.AddFlags(cmd)
 	cmd.Flags().StringVarP(&buildDefinitionPath, "build-definition-path", "o", "",
 		"Required - Path to store the generated BuildDefinition to.")
+	cmd.Flags().StringVarP(&resolutionStrategy, "resolution-strategy", "r", "abort",
+		"Optional - Strategy for resolving unexpected commits. One of 'abort', 'checkout', or 'ignore'.")
 
 	return cmd
 }
@@ -69,14 +87,17 @@ func DryRunCmd(check func(error)) *cobra.Command {
 func BuildCmd(check func(error)) *cobra.Command {
 	io := &pkg.InputOptions{}
 	var subjectsPath string
+	var resolutionStrategy string
 
 	cmd := &cobra.Command{
 		Use:   "build [FLAGS]",
 		Short: "Builds the artifacts using the build config, source repo, and the builder image.",
 		Run: func(cmd *cobra.Command, args []string) {
+			strategy, err := validateResolutionStrategy(resolutionStrategy, true)
+			check(err)
 			w, err := utils.CreateNewFileUnderCurrentDirectory(subjectsPath, os.O_WRONLY)
 			check(err)
-			config, err := pkg.NewDockerBuildConfig(io)
+			config, err := pkg.NewDockerBuildConfig(io, strategy)
 			check(err)
 
 			builder, err := pkg.NewBuilderWithGitFetcher(*config)
@@ -96,6 +117,8 @@ func BuildCmd(check func(error)) *cobra.Command {
 	io.AddFlags(cmd)
 	cmd.Flags().StringVarP(&subjectsPath, "subjects-path", "o", "",
 		"Required - Path to store a JSON-encoded array of subjects of the generated artifacts.")
+	cmd.Flags().StringVarP(&resolutionStrategy, "resolution-strategy", "r", "abort",
+		"Optional - Strategy for resolving unexpected commits. One of 'abort' or 'checkout'.")
 
 	return cmd
 }
@@ -110,4 +133,20 @@ func writeToFile[T any](obj T, w io.Writer) error {
 		return fmt.Errorf("writing to file failed: %w", err)
 	}
 	return nil
+}
+
+func validateResolutionStrategy(strategy string, isBuild bool) (int, error) {
+	lower := strings.ToLower(strategy)
+	values := buildStrategies
+	if !isBuild {
+		values = dryRunStrategies
+	}
+
+	for i, val := range values {
+		if lower == val {
+			return i, nil
+		}
+	}
+
+	return -1, fmt.Errorf("invalid strategy got: %s, want one of %v", strategy, values)
 }

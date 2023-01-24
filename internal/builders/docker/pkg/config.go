@@ -26,6 +26,16 @@ import (
 	"github.com/slsa-framework/slsa-github-generator/internal/utils"
 )
 
+// Constants defining the strategy for resolving a commit ID mismatch.
+const (
+	// AbortToResolve indicates the 'abort' strategy.
+	AbortToResolve = 0
+	// CheckoutToResolve indicates the 'checkout' strategy.
+	CheckoutToResolve = 1
+	// IgnoreToResolve indicates the 'ignore' strategy.
+	IgnoreToResolve = 2
+)
+
 // BuildConfig is a collection of parameters to use for building the artifact.
 type BuildConfig struct {
 	// The path, relative to the root of the git repository, where the artifact
@@ -61,16 +71,16 @@ func (bi *DockerImage) ToString() string {
 
 // DockerBuildConfig is a convenience class for holding validated user inputs.
 type DockerBuildConfig struct {
-	SourceRepo      string
-	SourceDigest    Digest
-	BuilderImage    DockerImage
-	BuildConfigPath string
-	ForceCheckout   bool
+	SourceRepo         string
+	SourceDigest       Digest
+	BuilderImage       DockerImage
+	BuildConfigPath    string
+	ResolutionStrategy int
 }
 
 // NewDockerBuildConfig validates the inputs and generates an instance of
 // DockerBuildConfig.
-func NewDockerBuildConfig(io *InputOptions) (*DockerBuildConfig, error) {
+func NewDockerBuildConfig(io *InputOptions, resolutionStrategy int) (*DockerBuildConfig, error) {
 	if err := validateURI(io.SourceRepo); err != nil {
 		return nil, err
 	}
@@ -90,11 +100,11 @@ func NewDockerBuildConfig(io *InputOptions) (*DockerBuildConfig, error) {
 	}
 
 	return &DockerBuildConfig{
-		SourceRepo:      io.SourceRepo,
-		SourceDigest:    *sourceRepoDigest,
-		BuilderImage:    *dockerImage,
-		BuildConfigPath: io.BuildConfigPath,
-		ForceCheckout:   io.ForceCheckout,
+		SourceRepo:         io.SourceRepo,
+		SourceDigest:       *sourceRepoDigest,
+		BuilderImage:       *dockerImage,
+		BuildConfigPath:    io.BuildConfigPath,
+		ResolutionStrategy: resolutionStrategy,
 	}, nil
 }
 

@@ -46,7 +46,7 @@ func Test_NewDockerBuildConfig(t *testing.T) {
 		GitCommitHash:   "sha1:9b5f98310dbbad675834474fa68c37d880687cb9",
 		BuilderImage:    "bash@sha256:9e2ba52487d945504d250de186cb4fe2e3ba023ed2921dd6ac8b97ed43e76af9",
 	}
-	got, err := NewDockerBuildConfig(io)
+	got, err := NewDockerBuildConfig(io, AbortToResolve)
 	if err != nil {
 		t.Fatalf("invalid inputs: %v", err)
 	}
