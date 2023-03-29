@@ -33,6 +33,12 @@ import (
 	"github.com/slsa-framework/slsa-github-generator/internal/utils"
 )
 
+func printVerboseHint(verbose bool) {
+	if !verbose {
+		fmt.Fprintln(os.Stderr, "use --verbose to see detailed error")
+	}
+}
+
 // DryRunCmd returns a new *cobra.Command that validates the input flags, and
 // generates a BuildDefinition from them, or terminates with an error.
 func DryRunCmd(check func(error)) *cobra.Command {
@@ -43,6 +49,8 @@ func DryRunCmd(check func(error)) *cobra.Command {
 		Use:   "dry-run [FLAGS]",
 		Short: "Generates and stores a JSON-formatted BuildDefinition based on the input arguments.",
 		Run: func(cmd *cobra.Command, args []string) {
+			defer printVerboseHint(inputOptions.Verbose)
+
 			w, err := utils.CreateNewFileUnderCurrentDirectory(buildDefinitionPath, os.O_WRONLY)
 			check(err)
 
@@ -79,6 +87,8 @@ func BuildCmd(check func(error)) *cobra.Command {
 		Use:   "build [FLAGS]",
 		Short: "Builds the artifacts using the build config, source repo, and the builder image.",
 		Run: func(cmd *cobra.Command, args []string) {
+			defer printVerboseHint(inputOptions.Verbose)
+
 			// Validate that the output folder is a /tmp subfolder.
 			absoluteOutputFolder, err := filepath.Abs(outputFolder)
 			check(err)
